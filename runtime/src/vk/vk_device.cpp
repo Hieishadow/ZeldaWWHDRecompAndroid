@@ -1180,9 +1180,6 @@ bool ensure_swapchain(Swapchain& sc, bool main = true) {
     // the game paces itself (GX2 flips are timed in gx2_core.cpp): don't let presentation block it.
     // With frame generation the present thread paces the frames and each one must be shown: FIFO.
     VkPresentModeKHR mode = VK_PRESENT_MODE_FIFO_KHR;
-    for (auto m : modes)
-        if (m == VK_PRESENT_MODE_MAILBOX_KHR && !(main && fg::loaded())) mode = m;
-
     VkSwapchainCreateInfoKHR ci{VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
     ci.surface = sc.surface;
     ci.minImageCount = std::max(caps.minImageCount, 3u);
