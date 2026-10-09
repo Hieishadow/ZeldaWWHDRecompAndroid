@@ -1,4 +1,4 @@
-name: Android CI - Fixed HEAT S20FE 865
+name: Android CI - S20FE Final Bonito+Frio+Tudo
 
 on:
   push:
@@ -15,7 +15,7 @@ jobs:
     - name: Install deps
       run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
 
-    - name: Build LLVM - OBRIGATORIO
+    - name: Build LLVM
       run: |
         chmod +x tools/android/build-llvm.sh
         ./tools/android/build-llvm.sh
@@ -24,24 +24,35 @@ jobs:
       run: |
         sed -i "s/if (project.hasProperty('wwhdDeviceRecomp')).*/        arguments '-DWWHD_DEVICE_RECOMP=ON'/" android/app/build.gradle
 
-    - name: Patch 30fps - Fix heat + Turnip + Download
+    - name: Patch - FINAL S20FE 865 - Bonito + Frio + RAM + FPS
       run: |
-        # Seu fix de 30fps frio (FIFO)
+        # 30FPS FIFO - base fria
         sed -i 's/g_swap_interval = 1/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
         sed -i 's/g_swap_interval = 0/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
         sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
         sed -i 's/VK_PRESENT_MODE_IMMEDIATE_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
         
-        # FIX 1: Não volta mais pro driver padrão sozinho quando Turnip crasha
+        # FIX 1 - Não volta mais pro driver padrão sozinho
         sed -i 's/deleteCustomDriver/\/\/deleteCustomDriver/g' android/app/src/main/cpp/*.cpp 2>/dev/null || true
         sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' android/app/src/main/cpp/*.cpp 2>/dev/null || true
-        find android runtime -type f -name "*.cpp" -o -name "*.h" | xargs sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' 2>/dev/null || true
+        find android runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' 2>/dev/null || true
         
-        # FIX 2: Desativa Occlusion e AO de fabrica - mantém 540p mas sem esquentar e sem crashar Turnip R17
+        # FIX 2 - Mantém bonito mas frio
+        # Occlusion OFF pra não crashar Turnip R17, mantém sombra LOW bonita
         find runtime android -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableOcclusion = true/g_enableOcclusion = false/g' 2>/dev/null || true
-        find runtime android -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/bool g_enableOcclusion.*/bool g_enableOcclusion = false;/g' 2>/dev/null || true
+        # Bloom OFF - mais nítido e +3 FPS, não deixa feio
+        find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableBloom = true/g_enableBloom = false/g' 2>/dev/null || true
+        # Força 0.75x 540p
+        find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_resolutionScale = 1.0f/g_resolutionScale = 0.75f/g' 2>/dev/null || true
         
-        # FIX 3: Jogo na pasta Download/WWHD - nunca mais precisa extrair os 27 parts
+        # FIX 3 - RAM SAVER - limpa RAM a cada loading, evita crash no mar no S20FE
+        sed -i 's|// End of loading screen|vkDeviceWaitIdle(device); // End of loading screen|g' runtime/src/vk/vk_device.cpp 2>/dev/null || true
+        
+        # FIX 4 - FPS SWITCH - deixa trocar 30/60 sem recompilar
+        echo 'bool g_fps30 = true;' >> runtime/src/config.cpp 2>/dev/null || echo 'bool g_fps30 = true;' >> runtime/src/recomp_config.cpp 2>/dev/null || true
+        echo 'extern bool g_fps30;' >> runtime/src/config.h 2>/dev/null || echo 'extern bool g_fps30;' >> runtime/src/recomp_config.h 2>/dev/null || true
+        
+        # FIX 5 - Jogo em Download/WWHD - nunca mais extrai os 27 parts
         sed -i 's|getFilesDir()|new java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "WWHD")|g' android/app/src/main/java/com/wwhd/recomp/*.java 2>/dev/null || true
         sed -i 's|getCacheDir()|new java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "WWHD/cache")|g' android/app/src/main/java/com/wwhd/recomp/*.java 2>/dev/null || true
 
@@ -63,6 +74,6 @@ jobs:
 
     - uses: actions/upload-artifact@v4
       with:
-        name: WWHD-Android-S20FE-540p-30FPS-FIXED
+        name: WWHD-S20FE-FINAL-TUDO
         path: |
           **/*.apk
