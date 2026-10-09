@@ -1,5 +1,6 @@
 name: Android CI - S20FE FAST NO LLVM
 on:
+  push:
   workflow_dispatch:
 jobs:
   build:
@@ -19,7 +20,8 @@ jobs:
     - name: Apply S20FE Patches
       run: |
         sed -i 's/g_swap_interval = 1/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
-        sed -i 's/VK_PRESENT_MODE.*FIFO/KHR/g' runtime/src/vk/vk_device.cpp || true
+        sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
+        sed -i 's/VK_PRESENT_MODE_IMMEDIATE_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
         find runtime android -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' 2>/dev/null || true
         find runtime android -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableOcclusion = true/g_enableOcclusion = false/g' 2>/dev/null || true
         find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableBloom = true/g_enableBloom = false/g' 2>/dev/null || true
