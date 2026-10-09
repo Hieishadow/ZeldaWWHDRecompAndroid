@@ -13,22 +13,18 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Patch - Force 30fps (fix heat + 0.75x)
+    - name: Patch - Force 30fps + FIFO (fix heat)
       run: |
-        echo "=== gx2_core.cpp ==="
-        ls runtime/src/gx2/
-        sed -i 's/static uint32 g_swap_interval = 1;/static uint32 g_swap_interval = 2; \/\/ locked 30fps - fix heat/' runtime/src/gx2/gx2_core.cpp
+        echo "Patching gx2_core.cpp..."
+        sed -i 's/g_swap_interval = 1/g_swap_interval = 2/' runtime/src/gx2/gx2_core.cpp
         sed -i 's/std::max<uint32>(arg(c, 0), 1)/std::max<uint32>(arg(c, 0), 2)/' runtime/src/gx2/gx2_core.cpp
         sed -i '/park_sleep_until/a \    std::this_thread::sleep_for(std::chrono::milliseconds(4));' runtime/src/gx2/gx2_core.cpp
-        grep -n "g_swap_interval" runtime/src/gx2/gx2_core.cpp
 
-        echo "=== Vulkan - try to force FIFO (if exists) ==="
-        find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec grep -l "MAILBOX" {} \; 2>/dev/null | while read f; do
-          echo "Patching $f"
-          sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' "$f" || true
-        done || true
+        echo "Patching vk_device.cpp - MAILBOX -> FIFO..."
+        sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp
+        sed -i 's/MAILBOX/FIFO/g' runtime/src/vk/vk_device.cpp
 
-        echo "=== Force DEVICE_RECOMP ON ==="
+        echo "Force DEVICE_RECOMP ON..."
         sed -i 's/WWHD_DEVICE_RECOMP.*OFF/WWHD_DEVICE_RECOMP ON/' CMakeLists.txt || true
 
     - uses: actions/setup-java@v4
@@ -44,10 +40,9 @@ jobs:
     - name: Setup tools
       run: sudo apt-get install -y ninja-build cmake
 
-    - name: Build native libs
+    - name: Build native
       run: |
         chmod +x android/build_native.sh
-        cat android/build_native.sh
         ./android/build_native.sh || true
 
     - name: Build APK
