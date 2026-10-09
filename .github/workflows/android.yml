@@ -10,6 +10,14 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Install deps
+      run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+
+    - name: Build LLVM - OBRIGATORIO
+      run: |
+        chmod +x tools/android/build-llvm.sh
+        ./tools/android/build-llvm.sh
+
     - name: Force DEVICE_RECOMP ON
       run: |
         sed -i "s/if (project.hasProperty('wwhdDeviceRecomp')).*/        arguments '-DWWHD_DEVICE_RECOMP=ON'/" android/app/build.gradle
