@@ -1,4 +1,4 @@
-name: Android CI - S20FE Final Bonito+Frio+Tudo
+name: Android CI - S20FE FINAL com CACHE
 
 on:
   push:
@@ -15,7 +15,20 @@ jobs:
     - name: Install deps
       run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
 
-    - name: Build LLVM
+    - name: Cache LLVM - NÃO FAZ DE NOVO
+      id: cache-llvm
+      uses: actions/cache@v4
+      with:
+        path: |
+          tools/android/llvm-build
+          extern/llvm-project/build
+          build/llvm
+        key: llvm-s20fe-v1-${{ hashFiles('tools/android/build-llvm.sh') }}
+        restore-keys: |
+          llvm-s20fe-v1-
+
+    - name: Build LLVM - Só se não tiver cache
+      if: steps.cache-llvm.outputs.cache-hit != 'true'
       run: |
         chmod +x tools/android/build-llvm.sh
         ./tools/android/build-llvm.sh
@@ -24,37 +37,18 @@ jobs:
       run: |
         sed -i "s/if (project.hasProperty('wwhdDeviceRecomp')).*/        arguments '-DWWHD_DEVICE_RECOMP=ON'/" android/app/build.gradle
 
-    - name: Patch - FINAL S20FE 865 - Bonito + Frio + RAM + FPS
+    - name: Patch - FINAL S20FE - Bonito + Frio + RAM + FPS
       run: |
-        # 30FPS FIFO - base fria
         sed -i 's/g_swap_interval = 1/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
         sed -i 's/g_swap_interval = 0/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
         sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
         sed -i 's/VK_PRESENT_MODE_IMMEDIATE_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
-        
-        # FIX 1 - Não volta mais pro driver padrão sozinho
         sed -i 's/deleteCustomDriver/\/\/deleteCustomDriver/g' android/app/src/main/cpp/*.cpp 2>/dev/null || true
-        sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' android/app/src/main/cpp/*.cpp 2>/dev/null || true
         find android runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' 2>/dev/null || true
-        
-        # FIX 2 - Mantém bonito mas frio
-        # Occlusion OFF pra não crashar Turnip R17, mantém sombra LOW bonita
         find runtime android -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableOcclusion = true/g_enableOcclusion = false/g' 2>/dev/null || true
-        # Bloom OFF - mais nítido e +3 FPS, não deixa feio
         find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableBloom = true/g_enableBloom = false/g' 2>/dev/null || true
-        # Força 0.75x 540p
         find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_resolutionScale = 1.0f/g_resolutionScale = 0.75f/g' 2>/dev/null || true
-        
-        # FIX 3 - RAM SAVER - limpa RAM a cada loading, evita crash no mar no S20FE
-        sed -i 's|// End of loading screen|vkDeviceWaitIdle(device); // End of loading screen|g' runtime/src/vk/vk_device.cpp 2>/dev/null || true
-        
-        # FIX 4 - FPS SWITCH - deixa trocar 30/60 sem recompilar
-        echo 'bool g_fps30 = true;' >> runtime/src/config.cpp 2>/dev/null || echo 'bool g_fps30 = true;' >> runtime/src/recomp_config.cpp 2>/dev/null || true
-        echo 'extern bool g_fps30;' >> runtime/src/config.h 2>/dev/null || echo 'extern bool g_fps30;' >> runtime/src/recomp_config.h 2>/dev/null || true
-        
-        # FIX 5 - Jogo em Download/WWHD - nunca mais extrai os 27 parts
         sed -i 's|getFilesDir()|new java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "WWHD")|g' android/app/src/main/java/com/wwhd/recomp/*.java 2>/dev/null || true
-        sed -i 's|getCacheDir()|new java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "WWHD/cache")|g' android/app/src/main/java/com/wwhd/recomp/*.java 2>/dev/null || true
 
     - uses: actions/setup-java@v4
       with:
@@ -74,6 +68,6 @@ jobs:
 
     - uses: actions/upload-artifact@v4
       with:
-        name: WWHD-S20FE-FINAL-TUDO
+        name: WWHD-S20FE-FINAL-CACHE
         path: |
           **/*.apk
