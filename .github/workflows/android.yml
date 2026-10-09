@@ -10,6 +10,15 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Force DEVICE_RECOMP ON
+      run: |
+        sed -i "s/if (project.hasProperty('wwhdDeviceRecomp')).*/        arguments '-DWWHD_DEVICE_RECOMP=ON'/" android/app/build.gradle
+
+    - name: Patch 30fps - Fix heat
+      run: |
+        sed -i 's/g_swap_interval = 1/g_swap_interval = 2/' runtime/src/gx2/gx2_core.cpp || true
+        sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
+
     - uses: actions/setup-java@v4
       with:
         java-version: '17'
@@ -24,14 +33,9 @@ jobs:
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleRelease -PwwhdDeviceRecomp --stacktrace
-
-    - name: Find APK
-      if: always()
-      run: find . -name "*.apk" -ls
+        ./gradlew assembleRelease -PwwhdDeviceRecomp
 
     - uses: actions/upload-artifact@v4
-      if: always()
       with:
         name: WWHD-Android-FIXED-30FPS
         path: |
