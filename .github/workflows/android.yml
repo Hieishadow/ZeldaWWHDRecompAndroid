@@ -1,10 +1,6 @@
 name: Android CI - Fixed HEAT
-
 on:
   workflow_dispatch:
-  push:
-    branches: [ "android" ]
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -12,31 +8,24 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-
-    - name: Patch - Force 30fps + FIFO (fix heat)
+    - name: Patch
       run: |
         sed -i 's/g_swap_interval = 1/g_swap_interval = 2/' runtime/src/gx2/gx2_core.cpp
         sed -i 's/std::max<uint32>(arg(c, 0), 1)/std::max<uint32>(arg(c, 0), 2)/' runtime/src/gx2/gx2_core.cpp
-        sed -i '/park_sleep_until/a \    std::this_thread::sleep_for(std::chrono::milliseconds(4));' runtime/src/gx2/gx2_core.cpp
         sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp
-        sed -i 's/WWHD_DEVICE_RECOMP.*OFF/WWHD_DEVICE_RECOMP ON/' CMakeLists.txt || true
-
     - uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
-
     - uses: nttld/setup-ndk@v1
       with:
         ndk-version: r27
         add-to-path: true
-
     - name: Build APK
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleRelease --stacktrace
-
+        ./gradlew assembleRelease -PwwhdDeviceRecomp --stacktrace
     - uses: actions/upload-artifact@v4
       with:
         name: WWHD-Android-FIXED-30FPS
