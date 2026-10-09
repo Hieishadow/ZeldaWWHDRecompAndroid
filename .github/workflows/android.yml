@@ -1,9 +1,9 @@
 name: Android CI - Fixed HEAT
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "android" ]
-  workflow_dispatch:
 
 jobs:
   build:
@@ -13,40 +13,56 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Fix overheating - Force 30fps + FIFO
+    - name: Patch - Fix overheating (30fps lock)
       run: |
-        echo "Patching gx2_core.cpp..."
-        sed -i 's/static uint32 g_swap_interval = 1;/static uint32 g_swap_interval = 2; \/\/ locked to 30fps to prevent CPU overheating on Android/' runtime/src/gx2/gx2_core.cpp
-        sed -i 's/g_swap_interval = std::max<uint32>(arg(c, 0), 1);/g_swap_interval = std::max<uint32>(arg(c, 0), 2);/' runtime/src/gx2/gx2_core.cpp
-        sed -i '/threads::park_sleep_until(vsync_time/a \    std::this_thread::sleep_for(std::chrono::milliseconds(4));' runtime/src/gx2/gx2_core.cpp
+        echo "=== Patching GX2 ==="
+        sed -i 's/g_swap_interval = 1/g_swap_interval = 2/' runtime/src/gx2/gx2_core.cpp
+        sed -i 's/std::max<uint32>(arg(c, 0), 1)/std::max<uint32>(arg(c, 0), 2)/' runtime/src/gx2/gx2_core.cpp
+        sed -i '/park_sleep_until/a \    std::this_thread::sleep_for(std::chrono::milliseconds(4));' runtime/src/gx2/gx2_core.cpp
 
-        echo "Patching Vulkan present mode..."
-        # força FIFO em vez de MAILBOX
-        find runtime/src/vk -name "*.cpp" -exec sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' {} \;
-        find runtime/src/vk -name "*.cpp" -exec sed -i 's/MAILBOX/FIFO/g' {} \;
+        echo "=== Patching Vulkan FIFO ==="
+        sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk.cpp
+        sed -i 's/MAILBOX/FIFO/g' runtime/src/vk/vk.cpp || true
 
-        echo "Forcing DEVICE_RECOMP ON..."
-        sed -i 's/option(WWHD_DEVICE_RECOMP.*OFF)/option(WWHD_DEVICE_RECOMP "Android: no build\/gen" ON)/' CMakeLists.txt
+        echo "=== Forcing DEVICE_RECOMP ON ==="
+        sed -i 's/WWHD_DEVICE_RECOMP.*OFF/WWHD_DEVICE_RECOMP ON/' CMakeLists.txt || true
 
-    - name: set up JDK 17
-      uses: actions/setup-java@v4
+    - uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Setup Android NDK
-      uses: nttld/setup-ndk@v1
+    - name: Setup Android NDK + CMake
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build cmake
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+
+    - uses: nttld/setup-ndk@v1
       with:
         ndk-version: r27
         add-to-path: true
+
+    - name: Build native libs
+      run: |
+        chmod +x android/build_native.sh
+        cd android
+        # Compila libwwhd.so já com DEVICE_RECOMP=ON (não precisa de build/gen)
+        ./build_native.sh || (
+          echo "build_native.sh failed, trying cmake directly..."
+          mkdir -p ../build/android
+          cd ../build/android
+          cmake ../.. -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=30 -DWWHD_DEVICE_RECOMP=ON -G Ninja
+          ninja
+        )
 
     - name: Build APK
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleRelease --stacktrace -DWWHD_DEVICE_RECOMP=ON
+        ./gradlew assembleRelease --stacktrace
 
     - uses: actions/upload-artifact@v4
       with:
-        name: WWHD-Android-FIXED-HEAT
+        name: WWHD-Android-FIXED-30FPS
         path: android/app/build/outputs/apk/release/*.apk
