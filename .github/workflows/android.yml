@@ -1,0 +1,32 @@
+name: Android CI - Fixed HEAT
+
+on:
+  push:
+    branches: [ "android" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - name: Fix overheating (force FIFO)
+      run: |
+        sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' src/vk/vk_device.cpp || true
+        sed -i '/if (m == VK_PRESENT_MODE_MAILBOX_KHR/d' src/vk/vk_device.cpp || true
+    - name: set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    - name: Build APK
+      run: |
+        cd android
+        chmod +x gradlew
+        ./gradlew assembleRelease
+    - uses: actions/upload-artifact@v4
+      with:
+        name: WWHD-Android-FIXED-HEAT
+        path: android/app/build/outputs/apk/release/*.apk
