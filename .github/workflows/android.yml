@@ -1,7 +1,9 @@
-name: Android CI - Fixed HEAT
+name: Android CI - Fixed HEAT S20FE 865
+
 on:
   push:
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,10 +24,26 @@ jobs:
       run: |
         sed -i "s/if (project.hasProperty('wwhdDeviceRecomp')).*/        arguments '-DWWHD_DEVICE_RECOMP=ON'/" android/app/build.gradle
 
-    - name: Patch 30fps - Fix heat
+    - name: Patch 30fps - Fix heat + Turnip + Download
       run: |
-        sed -i 's/g_swap_interval = 1/g_swap_interval = 2/' runtime/src/gx2/gx2_core.cpp || true
+        # Seu fix de 30fps frio (FIFO)
+        sed -i 's/g_swap_interval = 1/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
+        sed -i 's/g_swap_interval = 0/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
         sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
+        sed -i 's/VK_PRESENT_MODE_IMMEDIATE_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
+        
+        # FIX 1: Não volta mais pro driver padrão sozinho quando Turnip crasha
+        sed -i 's/deleteCustomDriver/\/\/deleteCustomDriver/g' android/app/src/main/cpp/*.cpp 2>/dev/null || true
+        sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' android/app/src/main/cpp/*.cpp 2>/dev/null || true
+        find android runtime -type f -name "*.cpp" -o -name "*.h" | xargs sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' 2>/dev/null || true
+        
+        # FIX 2: Desativa Occlusion e AO de fabrica - mantém 540p mas sem esquentar e sem crashar Turnip R17
+        find runtime android -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableOcclusion = true/g_enableOcclusion = false/g' 2>/dev/null || true
+        find runtime android -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/bool g_enableOcclusion.*/bool g_enableOcclusion = false;/g' 2>/dev/null || true
+        
+        # FIX 3: Jogo na pasta Download/WWHD - nunca mais precisa extrair os 27 parts
+        sed -i 's|getFilesDir()|new java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "WWHD")|g' android/app/src/main/java/com/wwhd/recomp/*.java 2>/dev/null || true
+        sed -i 's|getCacheDir()|new java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "WWHD/cache")|g' android/app/src/main/java/com/wwhd/recomp/*.java 2>/dev/null || true
 
     - uses: actions/setup-java@v4
       with:
@@ -45,6 +63,6 @@ jobs:
 
     - uses: actions/upload-artifact@v4
       with:
-        name: WWHD-Android-FIXED-30FPS
+        name: WWHD-Android-S20FE-540p-30FPS-FIXED
         path: |
           **/*.apk
