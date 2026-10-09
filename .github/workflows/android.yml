@@ -1,9 +1,6 @@
-name: Android CI - S20FE FINAL com CACHE
-
+name: Android CI - S20FE FAST NO LLVM
 on:
-  push:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -11,63 +8,28 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-
-    - name: Install deps
-      run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
-
-    - name: Cache LLVM - NÃO FAZ DE NOVO
-      id: cache-llvm
-      uses: actions/cache@v4
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
       with:
-        path: |
-          tools/android/llvm-build
-          extern/llvm-project/build
-          build/llvm
-        key: llvm-s20fe-v1-${{ hashFiles('tools/android/build-llvm.sh') }}
-        restore-keys: |
-          llvm-s20fe-v1-
-
-    - name: Build LLVM - Só se não tiver cache
-      if: steps.cache-llvm.outputs.cache-hit != 'true'
-      run: |
-        chmod +x tools/android/build-llvm.sh
-        ./tools/android/build-llvm.sh
-
-    - name: Force DEVICE_RECOMP ON
-      run: |
-        sed -i "s/if (project.hasProperty('wwhdDeviceRecomp')).*/        arguments '-DWWHD_DEVICE_RECOMP=ON'/" android/app/build.gradle
-
-    - name: Patch - FINAL S20FE - Bonito + Frio + RAM + FPS
-      run: |
-        sed -i 's/g_swap_interval = 1/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
-        sed -i 's/g_swap_interval = 0/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
-        sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
-        sed -i 's/VK_PRESENT_MODE_IMMEDIATE_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
-        sed -i 's/deleteCustomDriver/\/\/deleteCustomDriver/g' android/app/src/main/cpp/*.cpp 2>/dev/null || true
-        find android runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' 2>/dev/null || true
-        find runtime android -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableOcclusion = true/g_enableOcclusion = false/g' 2>/dev/null || true
-        find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableBloom = true/g_enableBloom = false/g' 2>/dev/null || true
-        find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_resolutionScale = 1.0f/g_resolutionScale = 0.75f/g' 2>/dev/null || true
-        sed -i 's|getFilesDir()|new java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "WWHD")|g' android/app/src/main/java/com/wwhd/recomp/*.java 2>/dev/null || true
-
-    - uses: actions/setup-java@v4
-      with:
-        java-version: '17'
         distribution: 'temurin'
-
+        java-version: '17'
     - uses: nttld/setup-ndk@v1
       with:
         ndk-version: r27
-        add-to-path: true
-
+    - name: Apply S20FE Patches
+      run: |
+        sed -i 's/g_swap_interval = 1/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
+        sed -i 's/VK_PRESENT_MODE.*FIFO/KHR/g' runtime/src/vk/vk_device.cpp || true
+        find runtime android -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' 2>/dev/null || true
+        find runtime android -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableOcclusion = true/g_enableOcclusion = false/g' 2>/dev/null || true
+        find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableBloom = true/g_enableBloom = false/g' 2>/dev/null || true
+        find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_resolutionScale = 1.0f/g_resolutionScale = 0.75f/g' 2>/dev/null || true
     - name: Build APK
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleRelease -PwwhdDeviceRecomp
-
+        ./gradlew assembleRelease
     - uses: actions/upload-artifact@v4
       with:
-        name: WWHD-S20FE-FINAL-CACHE
-        path: |
-          **/*.apk
+        name: WWHD-S20FE-FAST
+        path: "**/*.apk"
