@@ -1,5 +1,6 @@
 name: Android CI - Fixed HEAT
 on:
+  push:
   workflow_dispatch:
 jobs:
   build:
@@ -29,4 +30,4 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: WWHD-Android-FIXED-30FPS
-        path: android/app/build/outputs/apk/release/*.apk
+        path: android/app/build/outputs/apk/**/*.apk
