@@ -21,12 +21,17 @@ jobs:
       with:
         ndk-version: r27
 
+    - name: Setup Python + Recomp
+      run: |
+        pip install -r tools/recomp/requirements.txt || pip install clang
+        python3 tools/recomp/recomp.py --help || python3 tools/recomp/recomp.py || true
+        ls -la build/gen/ || ls -la ZeldaWWHDRecompAndroid/build/gen/ || true
+
     - name: Patch S20FE Frio + 30FPS
       run: |
         sed -i 's/g_swap_interval = 1/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
         sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
         sed -i 's/VK_PRESENT_MODE_IMMEDIATE_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
-        find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' {} \; 2>/dev/null || true
 
     - name: Build APK
       run: |
