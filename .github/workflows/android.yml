@@ -1,4 +1,4 @@
-name: Android CI - S20FE FIX
+name: Android CI - S20FE Final Bonito+Frio+Tudo - SEM LLVM
 on:
   push:
   workflow_dispatch:
@@ -7,39 +7,45 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+    - name: Gerar build/gen placeholder oficial
+      run: |
+        python3 -m pip install pycryptodome -q
+        mkdir -p tools/recomp
+        curl -L -o tools/recomp/stubgen.py https://raw.githubusercontent.com/ZeldaWWHDRecomp/ZeldaWWHDRecomp/main/tools/recomp/stubgen.py
+        python3 tools/recomp/stubgen.py
+        ls -lh build/gen/
 
-      - uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r27
+    - name: Patch - FINAL S20FE 865 - Bonito + Frio + RAM + FPS
+      run: |
+        sed -i 's/g_swap_interval = 1/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
+        sed -i 's/g_swap_interval = 0/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
+        sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
+        sed -i 's/VK_PRESENT_MODE_IMMEDIATE_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
+        find android runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' 2>/dev/null || true
+        find runtime android -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableOcclusion = true/g_enableOcclusion = false/g' 2>/dev/null || true
+        find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableBloom = true/g_enableBloom = false/g' 2>/dev/null || true
+        find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_resolutionScale = 1.0f/g_resolutionScale = 0.75f/g' 2>/dev/null || true
 
-      - name: Gerar build/gen placeholder oficial
-        run: |
-          python3 -m pip install pycryptodome 2>&1 | tail -n 5
-          python3 tools/recomp/stubgen.py
-          ls -lh build/gen/
+    - uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
 
-      - name: Patch S20FE Frio 30FPS
-        run: |
-          sed -i 's/g_swap_interval = 1/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
-          sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
-          sed -i 's/VK_PRESENT_MODE_IMMEDIATE_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
+    - uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: r27
 
-      - name: Build APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+    - name: Build APK
+      run: |
+        cd android
+        chmod +x gradlew
+        ./gradlew assembleRelease
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: WWHD-S20FE-FIXED
-          path: android/app/build/outputs/apk/release/*.apk
+    - uses: actions/upload-artifact@v4
+      with:
+        name: WWHD-S20FE-FINAL-TUDO
+        path: android/app/build/outputs/apk/release/*.apk
