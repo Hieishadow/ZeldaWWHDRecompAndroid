@@ -11,12 +11,22 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Gerar build/gen placeholder oficial
+    - name: Gerar build/gen + FIX compat Hieishadow
       run: |
         python3 -m pip install pycryptodome -q
         mkdir -p tools/recomp
-        curl -L -o tools/recomp/stubgen.py https://raw.githubusercontent.com/ZeldaWWHDRecomp/ZeldaWWHDRecomp/main/tools/recomp/stubgen.py
+        curl -sL -o tools/recomp/stubgen.py https://raw.githubusercontent.com/ZeldaWWHDRecomp/ZeldaWWHDRecomp/main/tools/recomp/stubgen.py
         python3 tools/recomp/stubgen.py build/gen
+        
+        echo "=== PATCH COMPAT HEADER ANTIGO ==="
+        sed -i 's/extern unsigned/extern const unsigned/g' runtime/include/recomp_table.h || true
+        sed -i 's/extern uint32_t/extern const uint32_t/g' runtime/include/recomp_table.h || true
+        sed -i 's/extern const RecompImport\* const/extern const RecompImport*/g' runtime/include/recomp_table.h || true
+        
+        echo "=== PATCH TABLE.C NOVO ==="
+        sed -i 's/\* const /\* /g' build/gen/table.c || true
+        cat runtime/include/recomp_table.h | head -n 25
+        cat build/gen/table.c | head -n 130 | tail -n 20
         ls -lh build/gen/
 
     - name: Patch - FINAL S20FE 865 - Bonito + Frio + RAM + FPS
