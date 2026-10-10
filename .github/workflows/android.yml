@@ -1,8 +1,7 @@
-name: Android CI - S20FE Final Bonito+Frio+Tudo - SEM LLVM
+name: Android CI - Fixed HEAT
 on:
   push:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -11,49 +10,22 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Gerar build/gen + FIX compat
-      run: |
-        python3 -m pip install pycryptodome -q
-        mkdir -p tools/recomp
-        curl -sL -o tools/recomp/stubgen.py https://raw.githubusercontent.com/ZeldaWWHDRecomp/ZeldaWWHDRecomp/main/tools/recomp/stubgen.py
-        python3 tools/recomp/stubgen.py build/gen
-        
-        # FIX header array vs pointer
-        sed -i 's/extern const RecompEntry\* g_recomp_funcs/extern const RecompEntry g_recomp_funcs[]/' runtime/include/recomp_table.h
-        sed -i 's/extern const RecompImport\* g_recomp_imports/extern const RecompImport g_recomp_imports[]/' runtime/include/recomp_table.h
-        sed -i 's/extern unsigned/extern const unsigned/g' runtime/include/recomp_table.h
-        sed -i 's/extern uint32_t/extern const uint32_t/g' runtime/include/recomp_table.h
-        
-        # FIX jni_main.cpp - restaura e só mexe no render_aspect com python (seguro)
-        git checkout -- runtime/src/android/jni_main.cpp
-        python3 << 'PY'
-        import pathlib
-        p = pathlib.Path("runtime/src/android/jni_main.cpp")
-        txt = p.read_text()
-        # Troca o bloco render_aspect por no-op que não quebra void
-        txt = txt.replace('else if (n == "render_aspect")', 'else if (n == "render_aspect_compat_disabled")')
-        # Se ainda tiver aspect::, troca por comentario seguro
-        txt = txt.replace('aspect::set_mode(value == 1 ? aspect::kWindow : aspect::kOriginal)', '/* aspect disabled */')
-        txt = txt.replace('return aspect::mode() == aspect::kWindow ? 1 : 0;', 'return 0;')
-        txt = txt.replace('aspect::mode()', '0')
-        txt = txt.replace('aspect::kWindow', '0')
-        txt = txt.replace('aspect::kOriginal', '0')
-        txt = txt.replace('aspect::set_mode', '/*no-op*/')
-        p.write_text(txt)
-        print("PATCHED OK")
-        PY
-        grep -n "render_aspect" runtime/src/android/jni_main.cpp
+    - name: Install deps
+      run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
 
-    - name: Patch - FINAL S20FE 865 - Bonito + Frio
+    - name: Build LLVM - OBRIGATORIO
       run: |
-        sed -i 's/g_swap_interval = 1/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
-        sed -i 's/g_swap_interval = 0/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
+        chmod +x tools/android/build-llvm.sh
+        ./tools/android/build-llvm.sh
+
+    - name: Force DEVICE_RECOMP ON
+      run: |
+        sed -i "s/if (project.hasProperty('wwhdDeviceRecomp')).*/        arguments '-DWWHD_DEVICE_RECOMP=ON'/" android/app/build.gradle
+
+    - name: Patch 30fps - Fix heat
+      run: |
+        sed -i 's/g_swap_interval = 1/g_swap_interval = 2/' runtime/src/gx2/gx2_core.cpp || true
         sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
-        sed -i 's/VK_PRESENT_MODE_IMMEDIATE_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
-        find android runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_customDriverFailed = true/g_customDriverFailed = false/g' 2>/dev/null || true
-        find runtime android -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableOcclusion = true/g_enableOcclusion = false/g' 2>/dev/null || true
-        find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_enableBloom = true/g_enableBloom = false/g' 2>/dev/null || true
-        find runtime -type f \( -name "*.cpp" -o -name "*.h" \) | xargs sed -i 's/g_resolutionScale = 1.0f/g_resolutionScale = 0.75f/g' 2>/dev/null || true
 
     - uses: actions/setup-java@v4
       with:
@@ -63,14 +35,16 @@ jobs:
     - uses: nttld/setup-ndk@v1
       with:
         ndk-version: r27
+        add-to-path: true
 
     - name: Build APK
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleRelease
+        ./gradlew assembleRelease -PwwhdDeviceRecomp
 
     - uses: actions/upload-artifact@v4
       with:
-        name: WWHD-S20FE-FINAL-TUDO
-        path: android/app/build/outputs/apk/release/*.apk
+        name: WWHD-Android-FIXED-30FPS
+        path: |
+          **/*.apk
