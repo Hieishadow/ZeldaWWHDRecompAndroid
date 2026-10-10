@@ -1,50 +1,94 @@
 name: Android CI - Fixed HEAT
+
 on:
   push:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    env:
+      ANDROID_NDK: ${{ github.workspace }}/android-ndk
+      LLVM_VERSION: llvmorg-20.1.8
+
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: Install deps
-      run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build git
 
-    - name: Build LLVM - OBRIGATORIO
-      run: |
-        chmod +x tools/android/build-llvm.sh
-        ./tools/android/build-llvm.sh
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: android/**/*.gradle*
 
-    - name: Force DEVICE_RECOMP ON
-      run: |
-        sed -i "s/if (project.hasProperty('wwhdDeviceRecomp')).*/        arguments '-DWWHD_DEVICE_RECOMP=ON'/" android/app/build.gradle
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27
+          add-to-path: true
 
-    - name: Patch 30fps - Fix heat
-      run: |
-        sed -i 's/g_swap_interval = 1/g_swap_interval = 2/' runtime/src/gx2/gx2_core.cpp || true
-        sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
+      - name: Set NDK path
+        run: |
+          echo "ANDROID_NDK=$ANDROID_NDK_HOME" >> "$GITHUB_ENV"
+          echo "NDK path: $ANDROID_NDK_HOME"
 
-    - uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - name: Cache LLVM 20.1.8 Android ARM64
+        id: llvm-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/llvm/src
+            build/llvm/host
+            build/llvm/android
+            build/llvm/install
+          key: llvm-20.1.8-android-arm64-ndk27-${{ runner.os }}-${{ hashFiles('tools/android/build-llvm.sh') }}
+          restore-keys: |
+            llvm-20.1.8-android-arm64-ndk27-${{ runner.os }}-
 
-    - uses: nttld/setup-ndk@v1
-      with:
-        ndk-version: r27
-        add-to-path: true
+      - name: Build LLVM if cache is missing
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        run: |
+          chmod +x tools/android/build-llvm.sh
+          ./tools/android/build-llvm.sh
 
-    - name: Build APK
-      run: |
-        cd android
-        chmod +x gradlew
-        ./gradlew assembleRelease -PwwhdDeviceRecomp
+      - name: Verify LLVM installation
+        run: |
+          test -d build/llvm/install
+          test -f build/llvm/install/LICENSE.TXT
+          find build/llvm/install -maxdepth 3 -type f | head -40
+          du -sh build/llvm/install
 
-    - uses: actions/upload-artifact@v4
-      with:
-        name: WWHD-Android-FIXED-30FPS
-        path: |
-          **/*.apk
+      - name: Force DEVICE_RECOMP ON
+        run: |
+          sed -i "s/if (project.hasProperty('wwhdDeviceRecomp')).*/        arguments '-DWWHD_DEVICE_RECOMP=ON'/" android/app/build.gradle
+
+      - name: Patch 30fps - Fix heat
+        run: |
+          sed -i 's/g_swap_interval = 1/g_swap_interval = 2/' runtime/src/gx2/gx2_core.cpp || true
+          sed -i 's/VK_PRESENT_MODE_MAILBOX_KHR/VK_PRESENT_MODE_FIFO_KHR/g' runtime/src/vk/vk_device.cpp || true
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease -PwwhdDeviceRecomp
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WWHD-Android-FIXED-30FPS
+          path: android/**/*.apk
+          if-no-files-found: error
