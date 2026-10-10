@@ -11,25 +11,26 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Gerar build/gen + FIX compat Hieishadow
+    - name: Gerar build/gen + FIX array vs pointer
       run: |
         python3 -m pip install pycryptodome -q
         mkdir -p tools/recomp
         curl -sL -o tools/recomp/stubgen.py https://raw.githubusercontent.com/ZeldaWWHDRecomp/ZeldaWWHDRecomp/main/tools/recomp/stubgen.py
         python3 tools/recomp/stubgen.py build/gen
         
-        echo "=== PATCH COMPAT HEADER ANTIGO ==="
-        sed -i 's/extern unsigned/extern const unsigned/g' runtime/include/recomp_table.h || true
-        sed -i 's/extern uint32_t/extern const uint32_t/g' runtime/include/recomp_table.h || true
-        sed -i 's/extern const RecompImport\* const/extern const RecompImport*/g' runtime/include/recomp_table.h || true
+        echo "=== PATCH HEADER ANTIGO -> NOVO ==="
+        # array vs pointer - esse era o erro da sua print
+        sed -i 's/extern const RecompEntry\* g_recomp_funcs/extern const RecompEntry g_recomp_funcs[]/' runtime/include/recomp_table.h
+        sed -i 's/extern const RecompImport\* g_recomp_imports/extern const RecompImport g_recomp_imports[]/' runtime/include/recomp_table.h
+        # unsigned vs const unsigned
+        sed -i 's/extern unsigned/extern const unsigned/g' runtime/include/recomp_table.h
+        sed -i 's/extern uint32_t/extern const uint32_t/g' runtime/include/recomp_table.h
+        sed -i 's/const const/const/g' runtime/include/recomp_table.h
         
-        echo "=== PATCH TABLE.C NOVO ==="
-        sed -i 's/\* const /\* /g' build/gen/table.c || true
-        cat runtime/include/recomp_table.h | head -n 25
-        cat build/gen/table.c | head -n 130 | tail -n 20
+        cat runtime/include/recomp_table.h
         ls -lh build/gen/
 
-    - name: Patch - FINAL S20FE 865 - Bonito + Frio + RAM + FPS
+    - name: Patch - FINAL S20FE 865 - Bonito + Frio
       run: |
         sed -i 's/g_swap_interval = 1/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
         sed -i 's/g_swap_interval = 0/g_swap_interval = 2/g' runtime/src/gx2/gx2_core.cpp || true
