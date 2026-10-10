@@ -18,25 +18,31 @@ jobs:
         curl -sL -o tools/recomp/stubgen.py https://raw.githubusercontent.com/ZeldaWWHDRecomp/ZeldaWWHDRecomp/main/tools/recomp/stubgen.py
         python3 tools/recomp/stubgen.py build/gen
         
-        # FIX 1 - array vs pointer (erro da print anterior)
+        # FIX header array vs pointer
         sed -i 's/extern const RecompEntry\* g_recomp_funcs/extern const RecompEntry g_recomp_funcs[]/' runtime/include/recomp_table.h
         sed -i 's/extern const RecompImport\* g_recomp_imports/extern const RecompImport g_recomp_imports[]/' runtime/include/recomp_table.h
         sed -i 's/extern unsigned/extern const unsigned/g' runtime/include/recomp_table.h
         sed -i 's/extern uint32_t/extern const uint32_t/g' runtime/include/recomp_table.h
         
-        # FIX 2 - aspect não existe no Hieishadow (erro dessa print nova)
-        # remove o bloco render_aspect inteiro
-        sed -i 's/else if (n == "render_aspect").*/else if (n == "render_aspect") {}/' runtime/src/android/jni_main.cpp
-        sed -i 's/if (n == "render_aspect").*/if (n == "render_aspect") return 0;/' runtime/src/android/jni_main.cpp
-        # se sobrar aspect::, neutraliza
-        sed -i 's/aspect::kWindow/0/g' runtime/src/android/jni_main.cpp
-        sed -i 's/aspect::kOriginal/0/g' runtime/src/android/jni_main.cpp
-        sed -i 's/aspect::mode()//g' runtime/src/android/jni_main.cpp
-        sed -i 's/aspect::set_mode//g' runtime/src/android/jni_main.cpp
-        sed -i 's/aspect//g' runtime/src/android/jni_main.cpp
-
-        cat runtime/include/recomp_table.h
-        grep -n "render_aspect" runtime/src/android/jni_main.cpp || echo "render_aspect removido OK"
+        # FIX jni_main.cpp - restaura e só mexe no render_aspect com python (seguro)
+        git checkout -- runtime/src/android/jni_main.cpp
+        python3 << 'PY'
+        import pathlib
+        p = pathlib.Path("runtime/src/android/jni_main.cpp")
+        txt = p.read_text()
+        # Troca o bloco render_aspect por no-op que não quebra void
+        txt = txt.replace('else if (n == "render_aspect")', 'else if (n == "render_aspect_compat_disabled")')
+        # Se ainda tiver aspect::, troca por comentario seguro
+        txt = txt.replace('aspect::set_mode(value == 1 ? aspect::kWindow : aspect::kOriginal)', '/* aspect disabled */')
+        txt = txt.replace('return aspect::mode() == aspect::kWindow ? 1 : 0;', 'return 0;')
+        txt = txt.replace('aspect::mode()', '0')
+        txt = txt.replace('aspect::kWindow', '0')
+        txt = txt.replace('aspect::kOriginal', '0')
+        txt = txt.replace('aspect::set_mode', '/*no-op*/')
+        p.write_text(txt)
+        print("PATCHED OK")
+        PY
+        grep -n "render_aspect" runtime/src/android/jni_main.cpp
 
     - name: Patch - FINAL S20FE 865 - Bonito + Frio
       run: |
