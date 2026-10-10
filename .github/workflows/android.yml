@@ -16,7 +16,7 @@ jobs:
         python3 -m pip install pycryptodome -q
         mkdir -p tools/recomp
         curl -L -o tools/recomp/stubgen.py https://raw.githubusercontent.com/ZeldaWWHDRecomp/ZeldaWWHDRecomp/main/tools/recomp/stubgen.py
-        python3 tools/recomp/stubgen.py
+        python3 tools/recomp/stubgen.py build/gen
         ls -lh build/gen/
 
     - name: Patch - FINAL S20FE 865 - Bonito + Frio + RAM + FPS
